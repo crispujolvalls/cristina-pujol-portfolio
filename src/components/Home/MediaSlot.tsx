@@ -69,6 +69,7 @@ const MediaSlot = ({
   const [inViewport, setInViewport] = useState(false);
   const optimizedImage = asset.src ? optimizedImageSources[asset.src] : undefined;
   const shouldLoadVideo = asset.kind === "video" && (active ?? true) && nearViewport;
+  const imagePriorityAttribute = priority ? { fetchpriority: "high" } : {};
 
   useEffect(() => {
     if (asset.kind !== "video") return;
@@ -118,12 +119,12 @@ const MediaSlot = ({
         <picture className="media-image-picture">
           {optimizedImage && <source type="image/webp" srcSet={optimizedImage.srcSet} sizes={imageSizes} />}
           <img
+            {...imagePriorityAttribute}
             className="media-slot-content"
             src={optimizedImage?.fallbackSrc ?? asset.src}
             alt={asset.alt}
             loading={priority ? "eager" : "lazy"}
             decoding="async"
-            fetchPriority={priority ? "high" : "auto"}
             sizes={imageSizes}
           />
         </picture>
