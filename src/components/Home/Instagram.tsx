@@ -66,7 +66,6 @@ const Instagram = () => {
                 <MediaSlot
                   className={`highlight-screen${index === 1 ? " highlight-screen--fit" : ""}`}
                   asset={video}
-                  preload={index === 1 ? "auto" : undefined}
                 />
                 <span className="highlight-island" aria-hidden="true" />
               </div>

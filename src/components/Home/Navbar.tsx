@@ -11,11 +11,9 @@ const links = [
 
 const mobileLinks = [
   ["Home", "hero"],
-  ["Specialities", "specialties"],
-  ["Before & Afters", "selected-work"],
+  ["Specialties", "specialties"],
+  ["Cases", "selected-work"],
   ["Approach", "methodology"],
-  ["Recent Highlights", "instagram"],
-  ["Testimonials", "testimonials"],
   ["Contact", "contact"],
 ];
 

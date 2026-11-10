@@ -106,7 +106,13 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex }: CaseCardProps
           if (!start || !window.matchMedia("(max-width: 760px)").matches || items.length < 2) return;
           const dx = event.clientX - start.x;
           const dy = event.clientY - start.y;
-          if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+          if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2) {
+            if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+              setHasNavigated(true);
+              setActiveIndex((current) => (current + 1) % items.length);
+            }
+            return;
+          }
           setHasNavigated(true);
           setActiveIndex((current) => (current + (dx < 0 ? 1 : -1) + items.length) % items.length);
         }}
@@ -118,6 +124,7 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex }: CaseCardProps
             className={`case-image${index === activeIndex ? " is-active" : ""}${item.role === "before" ? " case-image-before" : ""}${index === hoverIndex ? " case-image-hover" : ""}`}
             asset={item.asset}
             active={index === activeIndex || (isMouseOver && !hasNavigated && index === hoverIndex)}
+            imageSizes="(max-width: 760px) calc(100vw - 104px), 30vw"
           />
         ))}
         <button
@@ -148,7 +155,7 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex }: CaseCardProps
         </button>
         {items.length > 1 && <>
           <span className="case-media-count" aria-hidden="true">{activeIndex + 1} / {items.length}</span>
-          <span className="case-media-hint" aria-hidden="true">Swipe to view more</span>
+          <span className="case-media-hint" aria-hidden="true">Tap to view more</span>
         </>}
         <span className="case-media-status" aria-live="polite">
           Case {caseLabel}: {items[activeIndex].label}, media {activeIndex + 1} of {items.length}

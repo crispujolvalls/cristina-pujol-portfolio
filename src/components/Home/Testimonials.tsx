@@ -8,7 +8,7 @@ const TestimonialCard = ({ item }: { item: TestimonialItem }) => (
   <article className="testimonial-card">
     <blockquote>{item.review ?? "[CLIENT TESTIMONIAL — PLACEHOLDER]"}</blockquote>
     <div className="testimonial-client">
-      <MediaSlot className="testimonial-photo" asset={item.photo} />
+      <MediaSlot className="testimonial-photo" asset={item.photo} imageSizes="56px" />
       <div className="testimonial-client-copy">
         <p className="testimonial-name">{item.name}</p>
       </div>

@@ -2,7 +2,7 @@ import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import MediaSlot from "./MediaSlot";
 import { portfolioMedia } from "../../content/portfolioMedia";
-import cristinaSignature from "../../assets/cristinas-signature.png";
+import cristinaSignature from "../../assets/cristinas-signature.webp";
 
 const Hero = () => {
   useGSAP(() => {
@@ -24,7 +24,7 @@ const Hero = () => {
 
   return (
     <section id="hero" className="hero-section section-dark">
-      <MediaSlot className="hero-visual-placeholder" asset={portfolioMedia.hero} />
+      <MediaSlot className="hero-visual-placeholder" asset={portfolioMedia.hero} imageSizes="100vw" priority />
       <div className="hero-shade" aria-hidden="true" />
       <div className="hero-copy">
         <div className="hero-title">

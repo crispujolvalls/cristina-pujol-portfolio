@@ -85,7 +85,7 @@ const Specialties = () => {
           <div className="specialties-track">
             {portfolioMedia.specialties.map(({ name, image }) => (
               <article className="specialty-card" key={name}>
-                <MediaSlot className="specialty-image" asset={image} />
+                <MediaSlot className="specialty-image" asset={image} imageSizes="(max-width: 899px) 70vw, 22vw" />
                 <h3>{name}</h3>
               </article>
             ))}

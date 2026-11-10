@@ -80,7 +80,6 @@ const Methodology = () => {
                     className="method-step-media"
                     asset={portfolioMedia.methodology[index]}
                     active={active === index}
-                    preload="metadata"
                     aria-live="off"
                   />
                 </div>

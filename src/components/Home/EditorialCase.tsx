@@ -69,6 +69,13 @@ const EditorialCase = () => {
   }, []);
 
   const positions = ["featured", "upper-left", "upper-right", "lower-left", "lower-right"];
+  const imageSizes = [
+    "(max-width: 760px) 52vw, 38vw",
+    "(max-width: 760px) 27vw, 19vw",
+    "(max-width: 760px) 29vw, 22vw",
+    "(max-width: 760px) 27vw, 17vw",
+    "(max-width: 760px) 29vw, 21vw",
+  ];
 
   return (
     <section className="editorial-case-section section-paper" aria-label="Featured PMU case">
@@ -78,6 +85,7 @@ const EditorialCase = () => {
             key={image.placeholder}
             className={`editorial-case-image editorial-case-image--${positions[index]}`}
             asset={image}
+            imageSizes={imageSizes[index]}
           />
         ))}
       </div>
