@@ -97,6 +97,7 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex }: CaseCardProps
         className={`case-image-stack case-image-stack--case-${caseNumber}`}
         onPointerDown={(event) => {
           if (!window.matchMedia("(max-width: 760px)").matches || (event.target as HTMLElement).closest("button")) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
           swipeStart.current = { x: event.clientX, y: event.clientY };
         }}
         onPointerUp={(event) => {

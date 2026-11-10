@@ -41,60 +41,6 @@ const Instagram = () => {
     };
   }, { scope: sectionRef });
 
-  useGSAP(() => {
-    const section = sectionRef.current;
-    const track = section?.querySelector<HTMLElement>(".highlights-track");
-    if (!section || !track || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    const media = gsap.matchMedia();
-    media.add("(max-width: 760px)", () => {
-      const scroller = section.querySelector<HTMLElement>(".highlights-grid");
-      if (!scroller) return;
-
-      let cancelledByUser = false;
-      const demo = gsap.timeline({ paused: true })
-        .to(track, { y: -112, duration: 0.72, ease: "power2.out" })
-        .to(track, { y: -74, duration: 0.26, ease: "power1.inOut" })
-        .to(track, {
-          y: 0,
-          duration: 0.82,
-          ease: "power2.out",
-          onComplete: () => {
-            if (cancelledByUser) return;
-            scroller.scrollTop = 0;
-            gsap.set(track, { clearProps: "transform" });
-          },
-        });
-
-      const cancelForUserInput = () => {
-        cancelledByUser = true;
-        if (!demo.isActive()) return;
-        demo.pause();
-        gsap.set(track, { clearProps: "transform" });
-      };
-      const userInputEvents = ["pointerdown", "touchstart", "wheel", "keydown"] as const;
-      userInputEvents.forEach((eventName) => scroller.addEventListener(eventName, cancelForUserInput, { passive: true }));
-
-      const trigger = ScrollTrigger.create({
-        trigger: section,
-        start: "top 75%",
-        once: true,
-        onEnter: () => {
-          if (!cancelledByUser) demo.play(0);
-        },
-      });
-
-      return () => {
-        userInputEvents.forEach((eventName) => scroller.removeEventListener(eventName, cancelForUserInput));
-        trigger.kill();
-        demo.kill();
-        gsap.set(track, { clearProps: "transform" });
-      };
-    });
-
-    return () => media.revert();
-  }, { scope: sectionRef });
-
   return (
     <section ref={sectionRef} id="instagram" className="instagram-section section-dark" aria-labelledby="highlights-heading">
       <h2 id="highlights-heading" className="highlights-heading"><span>Recent</span><strong>Highlights</strong></h2>
