@@ -254,13 +254,22 @@ const MediaSlot = ({
   const [nearViewport, setNearViewport] = useState(false);
   const [inViewport, setInViewport] = useState(false);
   const [playbackFailed, setPlaybackFailed] = useState(false);
+  const [videoHasStarted, setVideoHasStarted] = useState(false);
   const optimizedImage = asset.src ? optimizedImageSources[asset.src] : undefined;
+  const videoPoster = asset.kind === "video" && asset.src
+    ? asset.src.replace(/\.mp4$/i, "-poster.webp")
+    : undefined;
   const isActive = active ?? true;
   const shouldPlayVideo = asset.kind === "video" && isActive && (manualVisibility || nearViewport);
   const shouldLoadVideo = asset.kind === "video" && (
     loadOnDemand || (nearViewport && (isActive || loadWhenNear))
   );
   const imagePriorityAttribute = priority ? { fetchpriority: "high" } : {};
+
+  useEffect(() => {
+    setVideoHasStarted(false);
+    setPlaybackFailed(false);
+  }, [asset.src]);
 
   useEffect(() => {
     if (asset.kind !== "video" || manualVisibility) return;
@@ -296,19 +305,51 @@ const MediaSlot = ({
   return (
     <div className={`media-slot${asset.src ? " has-media" : " media-placeholder"} ${className}`} aria-live={ariaLive}>
       {asset.src ? asset.kind === "video" ? (
-        <video
-          ref={videoRef}
-          className="media-slot-content"
-          src={shouldLoadVideo ? asset.src : undefined}
-          autoPlay={false}
-          muted
-          loop
-          playsInline
-          webkit-playsinline={showPlayFallback ? "true" : undefined}
-          controls={showPlayFallback && playbackFailed}
-          preload={shouldLoadVideo ? preload ?? "metadata" : "none"}
-          aria-label={asset.alt}
-        />
+        <>
+          {shouldLoadVideo && videoPoster && !videoHasStarted && !playbackFailed && (
+            <img
+              className="media-slot-content media-video-poster"
+              src={videoPoster}
+              alt=""
+              aria-hidden="true"
+              decoding="async"
+            />
+          )}
+          <video
+            ref={videoRef}
+            className="media-slot-content"
+            src={shouldLoadVideo ? asset.src : undefined}
+            poster={shouldLoadVideo ? videoPoster : undefined}
+            autoPlay={false}
+            muted
+            loop
+            playsInline
+            webkit-playsinline={showPlayFallback ? "true" : undefined}
+            controls={showPlayFallback && playbackFailed}
+            preload={shouldLoadVideo ? preload ?? "metadata" : "none"}
+            onPlaying={() => setVideoHasStarted(true)}
+            onWaiting={() => setVideoHasStarted(false)}
+            aria-label={asset.alt}
+          />
+          {playbackFailed && !showPlayFallback && (
+            <button
+              className="media-video-play"
+              type="button"
+              aria-label={`Play ${asset.alt}`}
+              onClick={() => {
+                const video = videoRef.current;
+                if (!video) return;
+                video.defaultMuted = true;
+                video.muted = true;
+                video.playsInline = true;
+                setPlaybackFailed(false);
+                void video.play().catch(() => setPlaybackFailed(true));
+              }}
+            >
+              <span aria-hidden="true">▶</span>
+            </button>
+          )}
+        </>
       ) : (
         <picture className="media-image-picture">
           {optimizedImage && <source type="image/webp" srcSet={optimizedImage.srcSet} sizes={imageSizes} />}

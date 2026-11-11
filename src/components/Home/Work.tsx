@@ -129,10 +129,6 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, o
           const dx = event.clientX - start.x;
           const dy = event.clientY - start.y;
           if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2) {
-            if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
-              setHasNavigated(true);
-              setActiveIndex((current) => (current + 1) % items.length);
-            }
             return;
           }
           setHasNavigated(true);
@@ -177,7 +173,7 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, o
         </button>
         {items.length > 1 && <>
           <span className="case-media-count" aria-hidden="true">{activeIndex + 1} / {items.length}</span>
-          <span className="case-media-hint" aria-hidden="true">Tap to view more</span>
+          <span className="case-media-hint" aria-hidden="true">Swipe to view more</span>
         </>}
         <span className="case-media-status" aria-live="polite">
           Case {caseLabel}: {items[activeIndex].label}, media {activeIndex + 1} of {items.length}
