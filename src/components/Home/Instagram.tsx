@@ -4,6 +4,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import MediaSlot from "./MediaSlot";
 import { portfolioMedia } from "../../content/portfolioMedia";
+import { scheduleDesktopScrollTriggerRefresh } from "../../utils/scheduleDesktopScrollTriggerRefresh";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
@@ -97,9 +98,8 @@ const Instagram = () => {
         onLeaveBack: () => setRotation(startRotation),
       });
 
-      const refreshFrame = window.requestAnimationFrame(() => ScrollTrigger.refresh());
+      scheduleDesktopScrollTriggerRefresh();
       return () => {
-        window.cancelAnimationFrame(refreshFrame);
         trigger.kill();
       };
     });
@@ -133,6 +133,7 @@ const Instagram = () => {
                   className={`highlight-screen${index === 1 ? " highlight-screen--fit" : ""}`}
                   asset={video}
                   playbackPriority={isMobile ? (index === 0 ? 2 : 1) : 0}
+                  allowConcurrentPlayback={!isMobile}
                   active={isMobile ? activeVideoIndex === index : undefined}
                   loadOnDemand={isMobile && activeVideoIndex >= 0 && Math.abs(index - activeVideoIndex) <= 1}
                   manualVisibility={isMobile}

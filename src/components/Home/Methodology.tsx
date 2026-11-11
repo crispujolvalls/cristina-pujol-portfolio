@@ -3,6 +3,7 @@ import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import MediaSlot from "./MediaSlot";
 import { portfolioMedia } from "../../content/portfolioMedia";
+import { scheduleDesktopScrollTriggerRefresh } from "../../utils/scheduleDesktopScrollTriggerRefresh";
 
 const steps = [
   { number: "01", title: "Consultation", description: "The client’s preferences, expectations and desired results are discussed." },
@@ -114,9 +115,13 @@ const Methodology = () => {
       onLeaveBack: () => setActiveStep(-1),
     });
 
-    const refreshFrame = window.requestAnimationFrame(() => ScrollTrigger.refresh());
+    const isDesktopViewport = window.matchMedia("(min-width: 761px)").matches;
+    const refreshFrame = isDesktopViewport
+      ? 0
+      : window.requestAnimationFrame(() => ScrollTrigger.refresh());
+    if (isDesktopViewport) scheduleDesktopScrollTriggerRefresh();
     return () => {
-      window.cancelAnimationFrame(refreshFrame);
+      if (refreshFrame) window.cancelAnimationFrame(refreshFrame);
       trigger.kill();
     };
   }, []);

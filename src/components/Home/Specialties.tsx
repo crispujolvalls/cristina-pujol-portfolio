@@ -4,6 +4,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import MediaSlot from "./MediaSlot";
 import { portfolioMedia } from "../../content/portfolioMedia";
 import { scrollHeadingEntrance } from "../../utils/scrollHeadingEntrance";
+import { scheduleDesktopScrollTriggerRefresh } from "../../utils/scheduleDesktopScrollTriggerRefresh";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -61,9 +62,8 @@ const Specialties = () => {
         },
         onUpdate: (self) => setTrackProgress(self.progress),
       });
-      const refreshFrame = window.requestAnimationFrame(() => ScrollTrigger.refresh());
+      scheduleDesktopScrollTriggerRefresh();
       return () => {
-        window.cancelAnimationFrame(refreshFrame);
         trigger.kill();
       };
     });

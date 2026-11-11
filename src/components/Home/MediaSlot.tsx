@@ -10,6 +10,7 @@ type PlaybackCandidate = {
   eligible: boolean;
   priority: number;
   manualVisibility: boolean;
+  allowConcurrentPlayback: boolean;
   activationOrder: number;
   onAttempt?: () => void;
   onStarted?: () => void;
@@ -29,6 +30,31 @@ const updateVideoPlayback = () => {
     activeVideo?.pause();
     activeVideo = null;
     playbackCandidates.forEach((_candidate, video) => video.pause());
+    return;
+  }
+
+  const concurrentVideos = [...playbackCandidates]
+    .filter(([video, candidate]) => candidate.eligible && candidate.allowConcurrentPlayback && video.hasAttribute("src"))
+    .map(([video]) => video);
+  if (concurrentVideos.length > 0) {
+    playbackCandidates.forEach((candidate, video) => {
+      if (concurrentVideos.includes(video)) {
+        video.preload = "auto";
+        if (video.paused) {
+          video.defaultMuted = true;
+          video.muted = true;
+          void video.play().catch(() => {
+            candidate.eligible = false;
+            scheduleVideoPlayback();
+          });
+        }
+        return;
+      }
+
+      video.pause();
+      if (video.hasAttribute("src")) video.preload = "metadata";
+    });
+    activeVideo = null;
     return;
   }
 
@@ -88,12 +114,14 @@ const registerPlaybackCandidate = (
   video: HTMLVideoElement,
   priority: number,
   manualVisibility: boolean,
+  allowConcurrentPlayback: boolean,
   callbacks: Pick<PlaybackCandidate, "onAttempt" | "onStarted" | "onBlocked">,
 ) => {
   const candidate: PlaybackCandidate = {
     eligible: false,
     priority,
     manualVisibility,
+    allowConcurrentPlayback,
     activationOrder: 0,
     ...callbacks,
   };
@@ -199,6 +227,7 @@ type MediaSlotProps = {
   playbackPriority?: number;
   loadOnDemand?: boolean;
   manualVisibility?: boolean;
+  allowConcurrentPlayback?: boolean;
   showPlayFallback?: boolean;
   preload?: "none" | "metadata" | "auto";
   imageSizes?: string;
@@ -215,6 +244,7 @@ const MediaSlot = ({
   playbackPriority = 0,
   loadOnDemand = false,
   manualVisibility = false,
+  allowConcurrentPlayback = false,
   showPlayFallback = false,
   preload,
   imageSizes = "(max-width: 760px) 80vw, 35vw",
@@ -247,13 +277,14 @@ const MediaSlot = ({
       video,
       playbackPriority,
       manualVisibility,
+      allowConcurrentPlayback,
       {
         onAttempt: () => setPlaybackFailed(false),
         onStarted: () => setPlaybackFailed(false),
         onBlocked: () => setPlaybackFailed(true),
       },
     );
-  }, [asset.kind, asset.src, playbackPriority]);
+  }, [asset.kind, asset.src, playbackPriority, manualVisibility, allowConcurrentPlayback]);
 
   useEffect(() => {
     if (asset.kind !== "video") return;
