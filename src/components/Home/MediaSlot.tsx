@@ -6,9 +6,19 @@ const preloadTargets = new Map<Element, () => void>();
 const visibilityTargets = new Map<Element, (isVisible: boolean) => void>();
 let preloadObserver: IntersectionObserver | null = null;
 let visibilityObserver: IntersectionObserver | null = null;
-const playbackCandidates = new Map<HTMLVideoElement, { eligible: boolean; priority: number }>();
+type PlaybackCandidate = {
+  eligible: boolean;
+  priority: number;
+  manualVisibility: boolean;
+  activationOrder: number;
+  onAttempt?: () => void;
+  onStarted?: () => void;
+  onBlocked?: () => void;
+};
+
+const playbackCandidates = new Map<HTMLVideoElement, PlaybackCandidate>();
 const primedVideoFrames = new WeakSet<HTMLVideoElement>();
-const playRejectedCallbacks = new WeakMap<HTMLVideoElement, () => void>();
+let playbackActivationOrder = 0;
 let activeVideo: HTMLVideoElement | null = null;
 let playbackFrame = 0;
 let visibilityListenerAttached = false;
@@ -27,9 +37,13 @@ const updateVideoPlayback = () => {
     .filter(([video, candidate]) => candidate.eligible && video.hasAttribute("src"))
     .sort(([, a], [, b]) => b.priority - a.priority);
   const highestPriority = eligibleVideos[0]?.[1].priority ?? Number.NEGATIVE_INFINITY;
-  const nextVideo = activeVideo && currentCandidate?.eligible && currentCandidate.priority >= highestPriority
-    ? activeVideo
-    : eligibleVideos[0]?.[0] ?? null;
+  const recentManualVideo = eligibleVideos
+    .filter(([, candidate]) => candidate.manualVisibility)
+    .sort(([, a], [, b]) => b.activationOrder - a.activationOrder || b.priority - a.priority)[0]?.[0] ?? null;
+  const nextVideo = recentManualVideo
+    ?? (activeVideo && currentCandidate?.eligible && currentCandidate.priority >= highestPriority
+      ? activeVideo
+      : eligibleVideos[0]?.[0] ?? null);
 
   playbackCandidates.forEach((_candidate, video) => {
     if (video !== nextVideo) {
@@ -46,12 +60,21 @@ const updateVideoPlayback = () => {
   activeVideo = nextVideo;
   if (!nextVideo || !nextVideo.paused) return;
 
-  void nextVideo.play().catch(() => {
+  nextVideo.defaultMuted = true;
+  nextVideo.muted = true;
+  nextVideo.playsInline = true;
+  nextVideo.setAttribute("muted", "");
+  playbackCandidates.get(nextVideo)?.onAttempt?.();
+
+  void nextVideo.play().catch((reason: unknown) => {
     if (activeVideo !== nextVideo) return;
     activeVideo = null;
     const candidate = playbackCandidates.get(nextVideo);
     if (candidate) candidate.eligible = false;
-    playRejectedCallbacks.get(nextVideo)?.();
+    const errorName = typeof reason === "object" && reason !== null && "name" in reason
+      ? String((reason as { name: unknown }).name)
+      : "";
+    if (errorName === "NotAllowedError") candidate?.onBlocked?.();
     scheduleVideoPlayback();
   });
 };
@@ -64,18 +87,27 @@ function scheduleVideoPlayback() {
 const registerPlaybackCandidate = (
   video: HTMLVideoElement,
   priority: number,
+  manualVisibility: boolean,
+  callbacks: Pick<PlaybackCandidate, "onAttempt" | "onStarted" | "onBlocked">,
 ) => {
-  const candidate = { eligible: false, priority };
+  const candidate: PlaybackCandidate = {
+    eligible: false,
+    priority,
+    manualVisibility,
+    activationOrder: 0,
+    ...callbacks,
+  };
   const wakePlayback = () => scheduleVideoPlayback();
   const handlePlay = () => {
+    if (!candidate.eligible) candidate.activationOrder = ++playbackActivationOrder;
     candidate.eligible = true;
     activeVideo = video;
+    candidate.onStarted?.();
     scheduleVideoPlayback();
   };
   const handleError = () => {
     candidate.eligible = false;
     if (activeVideo === video) activeVideo = null;
-    playRejectedCallbacks.get(video)?.();
     scheduleVideoPlayback();
   };
   playbackCandidates.set(video, candidate);
@@ -112,6 +144,7 @@ const registerPlaybackCandidate = (
 const setPlaybackEligibility = (video: HTMLVideoElement, eligible: boolean) => {
   const candidate = playbackCandidates.get(video);
   if (!candidate || candidate.eligible === eligible) return;
+  if (eligible) candidate.activationOrder = ++playbackActivationOrder;
   candidate.eligible = eligible;
   scheduleVideoPlayback();
 };
@@ -210,10 +243,15 @@ const MediaSlot = ({
     if (asset.kind !== "video") return;
     const video = videoRef.current;
     if (!video) return;
-    playRejectedCallbacks.set(video, () => setPlaybackFailed(true));
     return registerPlaybackCandidate(
       video,
       playbackPriority,
+      manualVisibility,
+      {
+        onAttempt: () => setPlaybackFailed(false),
+        onStarted: () => setPlaybackFailed(false),
+        onBlocked: () => setPlaybackFailed(true),
+      },
     );
   }, [asset.kind, asset.src, playbackPriority]);
 

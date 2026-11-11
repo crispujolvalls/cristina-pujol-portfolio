@@ -15,6 +15,8 @@ const steps = [
 const Methodology = () => {
   const [active, setActive] = useState(-1);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
+  const [visibleVideoIndex, setVisibleVideoIndex] = useState(-1);
+  const [nearVideoIndexes, setNearVideoIndexes] = useState<number[]>([]);
   const activeStepRef = useRef(-1);
 
   useEffect(() => {
@@ -23,6 +25,50 @@ const Methodology = () => {
     mobileViewport.addEventListener("change", updateViewport);
     return () => mobileViewport.removeEventListener("change", updateViewport);
   }, []);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const mediaElements = Array.from(document.querySelectorAll<HTMLElement>("#methodology .method-step-media-reserve"));
+    if (mediaElements.length !== steps.length) return;
+
+    let frame = 0;
+    const updateVisibleVideo = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        let nextVisibleIndex = -1;
+        let largestVisibleHeight = 0;
+        const nextNearIndexes: number[] = [];
+
+        mediaElements.forEach((element, index) => {
+          const rect = element.getBoundingClientRect();
+          const visibleHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+          const activationThreshold = Math.min(80, rect.height * 0.2);
+          if (visibleHeight >= activationThreshold && visibleHeight > largestVisibleHeight) {
+            largestVisibleHeight = visibleHeight;
+            nextVisibleIndex = index;
+          }
+          if (rect.bottom >= -350 && rect.top <= window.innerHeight + 350) nextNearIndexes.push(index);
+        });
+
+        setVisibleVideoIndex((current) => current === nextVisibleIndex ? current : nextVisibleIndex);
+        setNearVideoIndexes((current) => current.length === nextNearIndexes.length
+          && current.every((index, position) => index === nextNearIndexes[position])
+          ? current
+          : nextNearIndexes);
+      });
+    };
+
+    window.addEventListener("scroll", updateVisibleVideo, { passive: true });
+    window.addEventListener("resize", updateVisibleVideo);
+    updateVisibleVideo();
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", updateVisibleVideo);
+      window.removeEventListener("resize", updateVisibleVideo);
+    };
+  }, [isMobile]);
 
   useGSAP(() => {
     const section = document.querySelector<HTMLElement>("#methodology");
@@ -94,8 +140,12 @@ const Methodology = () => {
                   <MediaSlot
                     className="method-step-media"
                     asset={portfolioMedia.methodology[index]}
-                    active={active === index}
-                    loadWhenNear
+                    active={isMobile ? visibleVideoIndex === index : active === index}
+                    loadWhenNear={!isMobile}
+                    loadOnDemand={isMobile ? nearVideoIndexes.includes(index) : undefined}
+                    manualVisibility={isMobile}
+                    playbackPriority={isMobile ? 3 : undefined}
+                    showPlayFallback={isMobile}
                     aria-live="off"
                   />
                 </div>
