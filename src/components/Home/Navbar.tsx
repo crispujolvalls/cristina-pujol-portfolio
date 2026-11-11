@@ -27,33 +27,44 @@ const Navbar = () => {
     const contact = document.querySelector<HTMLElement>("#contact");
     if (!hero || !methodology || !testimonials || !contact) return;
 
+    let updateFrame = 0;
+    let currentArea: "hero" | "approach" | "light" | "hidden" = "hero";
     const updateArea = () => {
-      const activationLine = window.innerHeight * 0.5;
-      const heroBounds = hero.getBoundingClientRect();
-      const methodologyBounds = methodology.getBoundingClientRect();
-      const testimonialsBounds = testimonials.getBoundingClientRect();
-      const contactBounds = contact.getBoundingClientRect();
-      const hideOnTestimonials = window.matchMedia("(max-width: 760px)").matches
-        && testimonialsBounds.top < window.innerHeight
-        && testimonialsBounds.bottom > 0;
+      if (updateFrame) return;
+      updateFrame = window.requestAnimationFrame(() => {
+        updateFrame = 0;
+        const activationLine = window.innerHeight * 0.5;
+        const heroBounds = hero.getBoundingClientRect();
+        const methodologyBounds = methodology.getBoundingClientRect();
+        const testimonialsBounds = testimonials.getBoundingClientRect();
+        const contactBounds = contact.getBoundingClientRect();
+        const hideOnTestimonials = window.matchMedia("(max-width: 760px)").matches
+          && testimonialsBounds.top < window.innerHeight
+          && testimonialsBounds.bottom > 0;
 
-      if (heroBounds.top <= activationLine && heroBounds.bottom > activationLine) {
-        setActiveArea("hero");
-      } else if (methodologyBounds.top <= activationLine && methodologyBounds.bottom > activationLine) {
-        setActiveArea("approach");
-      } else if (hideOnTestimonials) {
-        setActiveArea("hidden");
-      } else if (contactBounds.top <= window.innerHeight * 1.15 && contactBounds.bottom > activationLine) {
-        setActiveArea("light");
-      } else {
-        setActiveArea("hidden");
-      }
+        let nextArea: typeof currentArea = "hidden";
+        if (heroBounds.top <= activationLine && heroBounds.bottom > activationLine) {
+          nextArea = "hero";
+        } else if (methodologyBounds.top <= activationLine && methodologyBounds.bottom > activationLine) {
+          nextArea = "approach";
+        } else if (hideOnTestimonials) {
+          nextArea = "hidden";
+        } else if (contactBounds.top <= window.innerHeight * 1.15 && contactBounds.bottom > activationLine) {
+          nextArea = "light";
+        }
+
+        if (nextArea !== currentArea) {
+          currentArea = nextArea;
+          setActiveArea(nextArea);
+        }
+      });
     };
 
     updateArea();
     window.addEventListener("scroll", updateArea, { passive: true });
     window.addEventListener("resize", updateArea);
     return () => {
+      window.cancelAnimationFrame(updateFrame);
       window.removeEventListener("scroll", updateArea);
       window.removeEventListener("resize", updateArea);
     };

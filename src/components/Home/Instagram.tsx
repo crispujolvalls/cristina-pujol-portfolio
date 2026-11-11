@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -9,6 +9,14 @@ gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 const Instagram = () => {
   const sectionRef = useRef<HTMLElement>(null);
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
+
+  useEffect(() => {
+    const mobileViewport = window.matchMedia("(max-width: 760px)");
+    const updateViewport = () => setIsMobile(mobileViewport.matches);
+    mobileViewport.addEventListener("change", updateViewport);
+    return () => mobileViewport.removeEventListener("change", updateViewport);
+  }, []);
 
   useGSAP(() => {
     const section = sectionRef.current;
@@ -66,6 +74,7 @@ const Instagram = () => {
                 <MediaSlot
                   className={`highlight-screen${index === 1 ? " highlight-screen--fit" : ""}`}
                   asset={video}
+                  playbackPriority={isMobile ? (index === 0 ? 2 : 1) : 0}
                 />
                 <span className="highlight-island" aria-hidden="true" />
               </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import MediaSlot from "./MediaSlot";
@@ -15,6 +15,7 @@ const steps = [
 const Methodology = () => {
   const [active, setActive] = useState(-1);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
+  const activeStepRef = useRef(-1);
 
   useEffect(() => {
     const mobileViewport = window.matchMedia("(max-width: 760px)");
@@ -28,14 +29,27 @@ const Methodology = () => {
     const stepElements = Array.from(document.querySelectorAll<HTMLElement>("#methodology .method-step"));
     if (!section || stepElements.length !== steps.length) return;
 
-    const getActiveStep = () => {
+    let stepThresholds: number[] = [];
+    const setActiveStep = (index: number) => {
+      if (activeStepRef.current === index) return;
+      activeStepRef.current = index;
+      setActive(index);
+    };
+    const measureStepThresholds = () => {
+      const scrollY = window.scrollY;
       const activationLine = window.innerHeight * 0.46;
+      stepThresholds = stepElements.map((element) => element.getBoundingClientRect().top + scrollY - activationLine);
+    };
+    const getActiveStep = (scrollPosition = window.scrollY) => {
       let currentStep = 0;
-      stepElements.forEach((element, index) => {
-        if (element.getBoundingClientRect().top <= activationLine) currentStep = index;
+      stepThresholds.forEach((threshold, index) => {
+        if (scrollPosition >= threshold) currentStep = index;
       });
       return currentStep;
     };
+    const updateActiveStep = (scrollPosition = window.scrollY) => setActiveStep(getActiveStep(scrollPosition));
+
+    measureStepThresholds();
 
     const trigger = ScrollTrigger.create({
       id: "methodology-progress",
@@ -43,14 +57,15 @@ const Methodology = () => {
       start: "top bottom",
       end: "bottom top",
       invalidateOnRefresh: true,
-      onEnter: () => setActive(0),
-      onEnterBack: () => setActive(getActiveStep()),
-      onUpdate: () => setActive(getActiveStep()),
+      onEnter: () => setActiveStep(0),
+      onEnterBack: () => updateActiveStep(),
+      onRefreshInit: measureStepThresholds,
+      onUpdate: (self) => updateActiveStep(self.scroll()),
       onRefresh: (self) => {
-        if (self.isActive) setActive(getActiveStep());
+        if (self.isActive) updateActiveStep(self.scroll());
       },
-      onLeave: () => setActive(-1),
-      onLeaveBack: () => setActive(-1),
+      onLeave: () => setActiveStep(-1),
+      onLeaveBack: () => setActiveStep(-1),
     });
 
     const refreshFrame = window.requestAnimationFrame(() => ScrollTrigger.refresh());
@@ -80,6 +95,7 @@ const Methodology = () => {
                     className="method-step-media"
                     asset={portfolioMedia.methodology[index]}
                     active={active === index}
+                    loadWhenNear
                     aria-live="off"
                   />
                 </div>

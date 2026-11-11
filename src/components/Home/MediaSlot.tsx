@@ -6,6 +6,93 @@ const preloadTargets = new Map<Element, () => void>();
 const visibilityTargets = new Map<Element, (isVisible: boolean) => void>();
 let preloadObserver: IntersectionObserver | null = null;
 let visibilityObserver: IntersectionObserver | null = null;
+const playbackCandidates = new Map<HTMLVideoElement, { eligible: boolean; priority: number }>();
+const primedVideoFrames = new WeakSet<HTMLVideoElement>();
+let activeVideo: HTMLVideoElement | null = null;
+let playbackFrame = 0;
+let visibilityListenerAttached = false;
+
+const updateVideoPlayback = () => {
+  playbackFrame = 0;
+  if (document.visibilityState !== "visible") {
+    activeVideo?.pause();
+    activeVideo = null;
+    playbackCandidates.forEach((_candidate, video) => video.pause());
+    return;
+  }
+
+  const currentCandidate = activeVideo ? playbackCandidates.get(activeVideo) : undefined;
+  const eligibleVideos = [...playbackCandidates]
+    .filter(([video, candidate]) => candidate.eligible && video.hasAttribute("src"))
+    .sort(([, a], [, b]) => b.priority - a.priority);
+  const highestPriority = eligibleVideos[0]?.[1].priority ?? Number.NEGATIVE_INFINITY;
+  const nextVideo = activeVideo && currentCandidate?.eligible && currentCandidate.priority >= highestPriority
+    ? activeVideo
+    : eligibleVideos[0]?.[0] ?? null;
+
+  playbackCandidates.forEach((_candidate, video) => {
+    if (video !== nextVideo) {
+      video.pause();
+      if (video.hasAttribute("src") && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+        && video.duration > 0 && !primedVideoFrames.has(video)) {
+        primedVideoFrames.add(video);
+        video.currentTime = Math.min(0.05, video.duration / 2);
+      }
+    }
+    video.preload = video === nextVideo ? "auto" : "metadata";
+  });
+
+  activeVideo = nextVideo;
+  if (!nextVideo || !nextVideo.paused) return;
+
+  void nextVideo.play().catch(() => {
+    if (activeVideo !== nextVideo) return;
+    activeVideo = null;
+    const candidate = playbackCandidates.get(nextVideo);
+    if (candidate) candidate.eligible = false;
+    scheduleVideoPlayback();
+  });
+};
+
+function scheduleVideoPlayback() {
+  if (playbackFrame) return;
+  playbackFrame = window.requestAnimationFrame(updateVideoPlayback);
+}
+
+const registerPlaybackCandidate = (video: HTMLVideoElement, priority: number) => {
+  const candidate = { eligible: false, priority };
+  const wakePlayback = () => scheduleVideoPlayback();
+  playbackCandidates.set(video, candidate);
+  video.addEventListener("loadeddata", wakePlayback);
+  video.addEventListener("canplay", wakePlayback);
+  if (!visibilityListenerAttached) {
+    document.addEventListener("visibilitychange", scheduleVideoPlayback);
+    visibilityListenerAttached = true;
+  }
+  scheduleVideoPlayback();
+
+  return () => {
+    video.removeEventListener("loadeddata", wakePlayback);
+    video.removeEventListener("canplay", wakePlayback);
+    if (playbackCandidates.get(video) === candidate) playbackCandidates.delete(video);
+    if (activeVideo === video) {
+      video.pause();
+      activeVideo = null;
+    }
+    if (playbackCandidates.size === 0 && visibilityListenerAttached) {
+      document.removeEventListener("visibilitychange", scheduleVideoPlayback);
+      visibilityListenerAttached = false;
+    }
+    scheduleVideoPlayback();
+  };
+};
+
+const setPlaybackEligibility = (video: HTMLVideoElement, eligible: boolean) => {
+  const candidate = playbackCandidates.get(video);
+  if (!candidate || candidate.eligible === eligible) return;
+  candidate.eligible = eligible;
+  scheduleVideoPlayback();
+};
 
 const observeVideo = (video: HTMLVideoElement, onNear: () => void, onVisibility: (isVisible: boolean) => void) => {
   if (!("IntersectionObserver" in window)) {
@@ -22,12 +109,12 @@ const observeVideo = (video: HTMLVideoElement, onNear: () => void, onVisibility:
         preloadTargets.delete(entry.target);
         preloadObserver?.unobserve(entry.target);
       });
-    }, { rootMargin: "500px 0px" });
+    }, { rootMargin: "350px 0px" });
   }
   if (!visibilityObserver) {
     visibilityObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => visibilityTargets.get(entry.target)?.(entry.isIntersecting));
-    });
+      entries.forEach((entry) => visibilityTargets.get(entry.target)?.(entry.isIntersecting && entry.intersectionRatio >= 0.2));
+    }, { threshold: [0, 0.2] });
   }
 
   preloadTargets.set(video, onNear);
@@ -49,6 +136,8 @@ type MediaSlotProps = {
   children?: ReactNode;
   ariaLive?: "polite" | "off";
   active?: boolean;
+  loadWhenNear?: boolean;
+  playbackPriority?: number;
   preload?: "none" | "metadata" | "auto";
   imageSizes?: string;
   priority?: boolean;
@@ -60,6 +149,8 @@ const MediaSlot = ({
   children,
   ariaLive,
   active,
+  loadWhenNear = false,
+  playbackPriority = 0,
   preload,
   imageSizes = "(max-width: 760px) 80vw, 35vw",
   priority = false,
@@ -68,7 +159,8 @@ const MediaSlot = ({
   const [nearViewport, setNearViewport] = useState(false);
   const [inViewport, setInViewport] = useState(false);
   const optimizedImage = asset.src ? optimizedImageSources[asset.src] : undefined;
-  const shouldLoadVideo = asset.kind === "video" && (active ?? true) && nearViewport;
+  const shouldPlayVideo = asset.kind === "video" && (active ?? true) && nearViewport;
+  const shouldLoadVideo = asset.kind === "video" && nearViewport && ((active ?? true) || loadWhenNear);
   const imagePriorityAttribute = priority ? { fetchpriority: "high" } : {};
 
   useEffect(() => {
@@ -82,24 +174,15 @@ const MediaSlot = ({
     if (asset.kind !== "video") return;
     const video = videoRef.current;
     if (!video) return;
-    if (!shouldLoadVideo || !inViewport || document.visibilityState !== "visible") {
-      video.pause();
-      return;
-    }
+    return registerPlaybackCandidate(video, playbackPriority);
+  }, [asset.kind, asset.src, playbackPriority]);
 
-    const play = () => {
-      if (document.visibilityState === "visible" && inViewport) void video.play().catch(() => undefined);
-    };
-    video.addEventListener("loadeddata", play);
-    video.addEventListener("canplay", play);
-    document.addEventListener("visibilitychange", play);
-    play();
-    return () => {
-      video.removeEventListener("loadeddata", play);
-      video.removeEventListener("canplay", play);
-      document.removeEventListener("visibilitychange", play);
-    };
-  }, [active, asset.kind, asset.src, inViewport, shouldLoadVideo]);
+  useEffect(() => {
+    if (asset.kind !== "video") return;
+    const video = videoRef.current;
+    if (!video) return;
+    setPlaybackEligibility(video, shouldPlayVideo && inViewport);
+  }, [asset.kind, asset.src, inViewport, shouldPlayVideo]);
 
   return (
     <div className={`media-slot${asset.src ? " has-media" : " media-placeholder"} ${className}`} aria-live={ariaLive}>
@@ -108,11 +191,11 @@ const MediaSlot = ({
           ref={videoRef}
           className="media-slot-content"
           src={shouldLoadVideo ? asset.src : undefined}
-          autoPlay={shouldLoadVideo && inViewport}
+          autoPlay={false}
           muted
           loop
           playsInline
-          preload={shouldLoadVideo ? preload ?? "auto" : "none"}
+          preload={shouldLoadVideo ? preload ?? "metadata" : "none"}
           aria-label={asset.alt}
         />
       ) : (

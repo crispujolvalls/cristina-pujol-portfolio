@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -9,6 +9,16 @@ import { scrollHeadingEntrance } from "../../utils/scrollHeadingEntrance";
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 const Work = () => {
+  const [caseResetVersions, setCaseResetVersions] = useState(() =>
+    portfolioMedia.selectedWork.cases.map(() => 0),
+  );
+
+  const resetCaseMedia = (caseIndex: number) => {
+    setCaseResetVersions((versions) => versions.map((version, index) =>
+      index === caseIndex ? version + 1 : version,
+    ));
+  };
+
   useGSAP(() => {
     const motion = gsap.matchMedia();
     motion.add("(prefers-reduced-motion: no-preference)", () => {
@@ -33,6 +43,8 @@ const Work = () => {
               key={index}
               caseNumber={index + 1}
               items={workCase.media}
+              resetVersion={caseResetVersions[index]}
+              onNavigateCase={resetCaseMedia}
             defaultIndex={window.matchMedia("(max-width: 760px)").matches
               ? Math.max(0, workCase.media.findIndex((item) => item.role === "after"))
               : workCase.defaultIndex}
@@ -50,15 +62,24 @@ type CaseCardProps = {
   items: typeof portfolioMedia.selectedWork.cases[number]["media"];
   defaultIndex: number;
   hoverIndex: number;
+  resetVersion: number;
+  onNavigateCase: (caseIndex: number) => void;
 };
 
-const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex }: CaseCardProps) => {
+const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, onNavigateCase }: CaseCardProps) => {
   const [activeIndex, setActiveIndex] = useState(defaultIndex);
   const [hasNavigated, setHasNavigated] = useState(false);
   const [isMouseOver, setIsMouseOver] = useState(false);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const caseLabel = String(caseNumber).padStart(2, "0");
   const isMobileCaseCarousel = window.matchMedia("(max-width: 760px)").matches;
+
+  useLayoutEffect(() => {
+    if (resetVersion === 0) return;
+    setActiveIndex(0);
+    setHasNavigated(true);
+    setIsMouseOver(false);
+  }, [resetVersion]);
 
   const navigate = (direction: -1 | 1) => {
     setHasNavigated(true);
@@ -73,6 +94,7 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex }: CaseCardProps
     const currentIndex = cards.indexOf(card);
     if (currentIndex < 0 || cards.length < 2) return;
     const nextIndex = (currentIndex + direction + cards.length) % cards.length;
+    onNavigateCase(nextIndex);
     const behavior: ScrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     carousel.scrollTo({ left: cards[nextIndex].offsetLeft - cards[0].offsetLeft, behavior });
   };
