@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -10,6 +10,10 @@ gsap.registerPlugin(ScrollTrigger, useGSAP);
 const Instagram = () => {
   const sectionRef = useRef<HTMLElement>(null);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
+  const [mobileScrollRoot, setMobileScrollRoot] = useState<HTMLDivElement | null>(null);
+  const setHighlightsRoot = useCallback((element: HTMLDivElement | null) => {
+    setMobileScrollRoot(element);
+  }, []);
 
   useEffect(() => {
     const mobileViewport = window.matchMedia("(max-width: 760px)");
@@ -66,7 +70,7 @@ const Instagram = () => {
         <circle cx="12" cy="12" r="4.1" stroke="url(#instagram-logo-gradient)" strokeWidth="1.8" />
         <circle cx="17.7" cy="6.5" r="1.1" fill="url(#instagram-logo-gradient)" />
       </svg>
-      <div className="highlights-grid page-gutter" aria-label="Four Instagram video placeholders">
+      <div ref={setHighlightsRoot} className="highlights-grid page-gutter" aria-label="Four Instagram video placeholders">
         <div className="highlights-track">
           {portfolioMedia.instagramHighlights.map((video, index) => (
             <article className="highlight-phone" key={video.placeholder} aria-label={`Instagram video ${String(index + 1).padStart(2, "0")}`}>
@@ -75,6 +79,8 @@ const Instagram = () => {
                   className={`highlight-screen${index === 1 ? " highlight-screen--fit" : ""}`}
                   asset={video}
                   playbackPriority={isMobile ? (index === 0 ? 2 : 1) : 0}
+                  observerRoot={isMobile ? mobileScrollRoot : null}
+                  showPlayFallback={isMobile}
                 />
                 <span className="highlight-island" aria-hidden="true" />
               </div>

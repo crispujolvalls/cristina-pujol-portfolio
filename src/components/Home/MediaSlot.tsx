@@ -4,10 +4,11 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const preloadTargets = new Map<Element, () => void>();
 const visibilityTargets = new Map<Element, (isVisible: boolean) => void>();
-let preloadObserver: IntersectionObserver | null = null;
-let visibilityObserver: IntersectionObserver | null = null;
+const preloadObservers = new Map<Element | null, IntersectionObserver>();
+const visibilityObservers = new Map<Element | null, IntersectionObserver>();
 const playbackCandidates = new Map<HTMLVideoElement, { eligible: boolean; priority: number }>();
 const primedVideoFrames = new WeakSet<HTMLVideoElement>();
+const playRejectedCallbacks = new WeakMap<HTMLVideoElement, () => void>();
 let activeVideo: HTMLVideoElement | null = null;
 let playbackFrame = 0;
 let visibilityListenerAttached = false;
@@ -50,6 +51,7 @@ const updateVideoPlayback = () => {
     activeVideo = null;
     const candidate = playbackCandidates.get(nextVideo);
     if (candidate) candidate.eligible = false;
+    playRejectedCallbacks.get(nextVideo)?.();
     scheduleVideoPlayback();
   });
 };
@@ -59,12 +61,29 @@ function scheduleVideoPlayback() {
   playbackFrame = window.requestAnimationFrame(updateVideoPlayback);
 }
 
-const registerPlaybackCandidate = (video: HTMLVideoElement, priority: number) => {
+const registerPlaybackCandidate = (
+  video: HTMLVideoElement,
+  priority: number,
+) => {
   const candidate = { eligible: false, priority };
   const wakePlayback = () => scheduleVideoPlayback();
+  const handlePlay = () => {
+    candidate.eligible = true;
+    activeVideo = video;
+    scheduleVideoPlayback();
+  };
+  const handleError = () => {
+    candidate.eligible = false;
+    if (activeVideo === video) activeVideo = null;
+    playRejectedCallbacks.get(video)?.();
+    scheduleVideoPlayback();
+  };
   playbackCandidates.set(video, candidate);
   video.addEventListener("loadeddata", wakePlayback);
+  video.addEventListener("loadedmetadata", wakePlayback);
   video.addEventListener("canplay", wakePlayback);
+  video.addEventListener("play", handlePlay);
+  video.addEventListener("error", handleError);
   if (!visibilityListenerAttached) {
     document.addEventListener("visibilitychange", scheduleVideoPlayback);
     visibilityListenerAttached = true;
@@ -73,7 +92,10 @@ const registerPlaybackCandidate = (video: HTMLVideoElement, priority: number) =>
 
   return () => {
     video.removeEventListener("loadeddata", wakePlayback);
+    video.removeEventListener("loadedmetadata", wakePlayback);
     video.removeEventListener("canplay", wakePlayback);
+    video.removeEventListener("play", handlePlay);
+    video.removeEventListener("error", handleError);
     if (playbackCandidates.get(video) === candidate) playbackCandidates.delete(video);
     if (activeVideo === video) {
       video.pause();
@@ -94,27 +116,36 @@ const setPlaybackEligibility = (video: HTMLVideoElement, eligible: boolean) => {
   scheduleVideoPlayback();
 };
 
-const observeVideo = (video: HTMLVideoElement, onNear: () => void, onVisibility: (isVisible: boolean) => void) => {
+const observeVideo = (
+  video: HTMLVideoElement,
+  onNear: () => void,
+  onVisibility: (isVisible: boolean) => void,
+  root: Element | null = null,
+) => {
   if (!("IntersectionObserver" in window)) {
     onNear();
     onVisibility(true);
     return () => undefined;
   }
 
+  let preloadObserver = preloadObservers.get(root);
   if (!preloadObserver) {
     preloadObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
         preloadTargets.get(entry.target)?.();
         preloadTargets.delete(entry.target);
-        preloadObserver?.unobserve(entry.target);
+        preloadObservers.get(root)?.unobserve(entry.target);
       });
-    }, { rootMargin: "350px 0px" });
+    }, { root, rootMargin: "350px 0px" });
+    preloadObservers.set(root, preloadObserver);
   }
+  let visibilityObserver = visibilityObservers.get(root);
   if (!visibilityObserver) {
     visibilityObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => visibilityTargets.get(entry.target)?.(entry.isIntersecting && entry.intersectionRatio >= 0.2));
     }, { threshold: [0, 0.2] });
+    visibilityObservers.set(root, visibilityObserver);
   }
 
   preloadTargets.set(video, onNear);
@@ -125,8 +156,8 @@ const observeVideo = (video: HTMLVideoElement, onNear: () => void, onVisibility:
   return () => {
     preloadTargets.delete(video);
     visibilityTargets.delete(video);
-    preloadObserver?.unobserve(video);
-    visibilityObserver?.unobserve(video);
+    preloadObservers.get(root)?.unobserve(video);
+    visibilityObservers.get(root)?.unobserve(video);
   };
 };
 
@@ -138,6 +169,8 @@ type MediaSlotProps = {
   active?: boolean;
   loadWhenNear?: boolean;
   playbackPriority?: number;
+  observerRoot?: Element | null;
+  showPlayFallback?: boolean;
   preload?: "none" | "metadata" | "auto";
   imageSizes?: string;
   priority?: boolean;
@@ -151,6 +184,8 @@ const MediaSlot = ({
   active,
   loadWhenNear = false,
   playbackPriority = 0,
+  observerRoot = null,
+  showPlayFallback = false,
   preload,
   imageSizes = "(max-width: 760px) 80vw, 35vw",
   priority = false,
@@ -158,6 +193,7 @@ const MediaSlot = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [nearViewport, setNearViewport] = useState(false);
   const [inViewport, setInViewport] = useState(false);
+  const [playbackFailed, setPlaybackFailed] = useState(false);
   const optimizedImage = asset.src ? optimizedImageSources[asset.src] : undefined;
   const shouldPlayVideo = asset.kind === "video" && (active ?? true) && nearViewport;
   const shouldLoadVideo = asset.kind === "video" && nearViewport && ((active ?? true) || loadWhenNear);
@@ -167,14 +203,18 @@ const MediaSlot = ({
     if (asset.kind !== "video") return;
     const video = videoRef.current;
     if (!video) return;
-    return observeVideo(video, () => setNearViewport(true), setInViewport);
-  }, [asset.kind, asset.src]);
+    return observeVideo(video, () => setNearViewport(true), setInViewport, observerRoot);
+  }, [asset.kind, asset.src, observerRoot]);
 
   useEffect(() => {
     if (asset.kind !== "video") return;
     const video = videoRef.current;
     if (!video) return;
-    return registerPlaybackCandidate(video, playbackPriority);
+    playRejectedCallbacks.set(video, () => setPlaybackFailed(true));
+    return registerPlaybackCandidate(
+      video,
+      playbackPriority,
+    );
   }, [asset.kind, asset.src, playbackPriority]);
 
   useEffect(() => {
@@ -195,6 +235,8 @@ const MediaSlot = ({
           muted
           loop
           playsInline
+          webkit-playsinline={showPlayFallback ? "true" : undefined}
+          controls={showPlayFallback && playbackFailed}
           preload={shouldLoadVideo ? preload ?? "metadata" : "none"}
           aria-label={asset.alt}
         />
