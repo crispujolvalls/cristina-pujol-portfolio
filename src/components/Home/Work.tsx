@@ -70,7 +70,7 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, o
   const [activeIndex, setActiveIndex] = useState(defaultIndex);
   const [hasNavigated, setHasNavigated] = useState(false);
   const [isMouseOver, setIsMouseOver] = useState(false);
-  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const swipeStart = useRef<{ x: number; y: number; identifier: number } | null>(null);
   const caseLabel = String(caseNumber).padStart(2, "0");
   const isMobileCaseCarousel = window.matchMedia("(max-width: 760px)").matches;
 
@@ -84,6 +84,19 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, o
   const navigate = (direction: -1 | 1) => {
     setHasNavigated(true);
     setActiveIndex((current) => (current + direction + items.length) % items.length);
+  };
+
+  const finishTouchSwipe = (touch: { clientX: number; clientY: number } | undefined) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start || !touch || !window.matchMedia("(max-width: 760px)").matches || items.length < 2) return;
+
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+
+    // Use the same media index state as the desktop arrows; the case arrows stay separate.
+    navigate(dx < 0 ? 1 : -1);
   };
 
   const navigateCase = (direction: -1 | 1, button: HTMLButtonElement) => {
@@ -117,24 +130,19 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, o
     >
       <div
         className={`case-image-stack case-image-stack--case-${caseNumber}`}
-        onPointerDown={(event) => {
+        onTouchStartCapture={(event) => {
           if (!window.matchMedia("(max-width: 760px)").matches || (event.target as HTMLElement).closest("button")) return;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          swipeStart.current = { x: event.clientX, y: event.clientY };
+          const touch = event.touches[0];
+          if (!touch) return;
+          swipeStart.current = { x: touch.clientX, y: touch.clientY, identifier: touch.identifier };
         }}
-        onPointerUp={(event) => {
+        onTouchEndCapture={(event) => {
           const start = swipeStart.current;
-          swipeStart.current = null;
-          if (!start || !window.matchMedia("(max-width: 760px)").matches || items.length < 2) return;
-          const dx = event.clientX - start.x;
-          const dy = event.clientY - start.y;
-          if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2) {
-            return;
-          }
-          setHasNavigated(true);
-          setActiveIndex((current) => (current + (dx < 0 ? 1 : -1) + items.length) % items.length);
+          if (!start) return;
+          const touch = Array.from(event.changedTouches).find((changed) => changed.identifier === start.identifier);
+          finishTouchSwipe(touch);
         }}
-        onPointerCancel={() => { swipeStart.current = null; }}
+        onTouchCancelCapture={() => { swipeStart.current = null; }}
       >
         {items.map((item, index) => (
           <MediaSlot
