@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const preloadTargets = new Map<Element, () => void>();
 const visibilityTargets = new Map<Element, (isVisible: boolean) => void>();
-const preloadObservers = new Map<Element | null, IntersectionObserver>();
-const visibilityObservers = new Map<Element | null, IntersectionObserver>();
+let preloadObserver: IntersectionObserver | null = null;
+let visibilityObserver: IntersectionObserver | null = null;
 const playbackCandidates = new Map<HTMLVideoElement, { eligible: boolean; priority: number }>();
 const primedVideoFrames = new WeakSet<HTMLVideoElement>();
 const playRejectedCallbacks = new WeakMap<HTMLVideoElement, () => void>();
@@ -120,7 +120,6 @@ const observeVideo = (
   video: HTMLVideoElement,
   onNear: () => void,
   onVisibility: (isVisible: boolean) => void,
-  root: Element | null = null,
 ) => {
   if (!("IntersectionObserver" in window)) {
     onNear();
@@ -128,24 +127,20 @@ const observeVideo = (
     return () => undefined;
   }
 
-  let preloadObserver = preloadObservers.get(root);
   if (!preloadObserver) {
     preloadObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
         preloadTargets.get(entry.target)?.();
         preloadTargets.delete(entry.target);
-        preloadObservers.get(root)?.unobserve(entry.target);
+        preloadObserver?.unobserve(entry.target);
       });
-    }, { root, rootMargin: "350px 0px" });
-    preloadObservers.set(root, preloadObserver);
+    }, { rootMargin: "350px 0px" });
   }
-  let visibilityObserver = visibilityObservers.get(root);
   if (!visibilityObserver) {
     visibilityObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => visibilityTargets.get(entry.target)?.(entry.isIntersecting && entry.intersectionRatio >= 0.2));
     }, { threshold: [0, 0.2] });
-    visibilityObservers.set(root, visibilityObserver);
   }
 
   preloadTargets.set(video, onNear);
@@ -156,8 +151,8 @@ const observeVideo = (
   return () => {
     preloadTargets.delete(video);
     visibilityTargets.delete(video);
-    preloadObservers.get(root)?.unobserve(video);
-    visibilityObservers.get(root)?.unobserve(video);
+    preloadObserver?.unobserve(video);
+    visibilityObserver?.unobserve(video);
   };
 };
 
@@ -169,7 +164,8 @@ type MediaSlotProps = {
   active?: boolean;
   loadWhenNear?: boolean;
   playbackPriority?: number;
-  observerRoot?: Element | null;
+  loadOnDemand?: boolean;
+  manualVisibility?: boolean;
   showPlayFallback?: boolean;
   preload?: "none" | "metadata" | "auto";
   imageSizes?: string;
@@ -184,7 +180,8 @@ const MediaSlot = ({
   active,
   loadWhenNear = false,
   playbackPriority = 0,
-  observerRoot = null,
+  loadOnDemand = false,
+  manualVisibility = false,
   showPlayFallback = false,
   preload,
   imageSizes = "(max-width: 760px) 80vw, 35vw",
@@ -195,16 +192,19 @@ const MediaSlot = ({
   const [inViewport, setInViewport] = useState(false);
   const [playbackFailed, setPlaybackFailed] = useState(false);
   const optimizedImage = asset.src ? optimizedImageSources[asset.src] : undefined;
-  const shouldPlayVideo = asset.kind === "video" && (active ?? true) && nearViewport;
-  const shouldLoadVideo = asset.kind === "video" && nearViewport && ((active ?? true) || loadWhenNear);
+  const isActive = active ?? true;
+  const shouldPlayVideo = asset.kind === "video" && isActive && (manualVisibility || nearViewport);
+  const shouldLoadVideo = asset.kind === "video" && (
+    loadOnDemand || (nearViewport && (isActive || loadWhenNear))
+  );
   const imagePriorityAttribute = priority ? { fetchpriority: "high" } : {};
 
   useEffect(() => {
-    if (asset.kind !== "video") return;
+    if (asset.kind !== "video" || manualVisibility) return;
     const video = videoRef.current;
     if (!video) return;
-    return observeVideo(video, () => setNearViewport(true), setInViewport, observerRoot);
-  }, [asset.kind, asset.src, observerRoot]);
+    return observeVideo(video, () => setNearViewport(true), setInViewport);
+  }, [asset.kind, asset.src, manualVisibility]);
 
   useEffect(() => {
     if (asset.kind !== "video") return;
@@ -221,8 +221,8 @@ const MediaSlot = ({
     if (asset.kind !== "video") return;
     const video = videoRef.current;
     if (!video) return;
-    setPlaybackEligibility(video, shouldPlayVideo && inViewport);
-  }, [asset.kind, asset.src, inViewport, shouldPlayVideo]);
+    setPlaybackEligibility(video, shouldPlayVideo && (manualVisibility || inViewport));
+  }, [asset.kind, asset.src, inViewport, manualVisibility, shouldPlayVideo]);
 
   return (
     <div className={`media-slot${asset.src ? " has-media" : " media-placeholder"} ${className}`} aria-live={ariaLive}>

@@ -11,9 +11,61 @@ const Instagram = () => {
   const sectionRef = useRef<HTMLElement>(null);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
   const [mobileScrollRoot, setMobileScrollRoot] = useState<HTMLDivElement | null>(null);
+  const [activeVideoIndex, setActiveVideoIndex] = useState(-1);
   const setHighlightsRoot = useCallback((element: HTMLDivElement | null) => {
     setMobileScrollRoot(element);
   }, []);
+
+  useEffect(() => {
+    if (!isMobile || !mobileScrollRoot) return;
+
+    let frame = 0;
+    const updateVisibleVideo = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const rootRect = mobileScrollRoot.getBoundingClientRect();
+        const visibleTop = Math.max(rootRect.top + mobileScrollRoot.clientTop, 0);
+        const visibleBottom = Math.min(
+          rootRect.top + mobileScrollRoot.clientTop + mobileScrollRoot.clientHeight,
+          window.innerHeight,
+        );
+
+        if (visibleBottom <= visibleTop) {
+          setActiveVideoIndex((current) => current === -1 ? current : -1);
+          return;
+        }
+
+        let nextIndex = -1;
+        let largestVisibleHeight = 0;
+        mobileScrollRoot.querySelectorAll<HTMLElement>(".highlight-screen").forEach((screen, index) => {
+          const rect = screen.getBoundingClientRect();
+          const visibleHeight = Math.max(0, Math.min(rect.bottom, visibleBottom) - Math.max(rect.top, visibleTop));
+          if (visibleHeight > largestVisibleHeight) {
+            largestVisibleHeight = visibleHeight;
+            nextIndex = index;
+          }
+        });
+
+        const activeIndex = largestVisibleHeight >= Math.min(80, mobileScrollRoot.clientHeight * 0.2)
+          ? nextIndex
+          : -1;
+        setActiveVideoIndex((current) => current === activeIndex ? current : activeIndex);
+      });
+    };
+
+    mobileScrollRoot.addEventListener("scroll", updateVisibleVideo, { passive: true });
+    window.addEventListener("scroll", updateVisibleVideo, { passive: true });
+    window.addEventListener("resize", updateVisibleVideo);
+    updateVisibleVideo();
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      mobileScrollRoot.removeEventListener("scroll", updateVisibleVideo);
+      window.removeEventListener("scroll", updateVisibleVideo);
+      window.removeEventListener("resize", updateVisibleVideo);
+    };
+  }, [isMobile, mobileScrollRoot]);
 
   useEffect(() => {
     const mobileViewport = window.matchMedia("(max-width: 760px)");
@@ -23,34 +75,36 @@ const Instagram = () => {
   }, []);
 
   useGSAP(() => {
-    const section = sectionRef.current;
-    const logo = section?.querySelector<SVGElement>(".highlights-instagram-mark");
-    if (!section || !logo) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const motion = gsap.matchMedia();
+    motion.add("(min-width: 761px) and (prefers-reduced-motion: no-preference)", () => {
+      const section = sectionRef.current;
+      const logo = section?.querySelector<SVGElement>(".highlights-instagram-mark");
+      if (!section || !logo) return;
 
-    const setRotation = gsap.quickSetter(logo, "rotation", "deg");
-    const startRotation = 0;
-    const endRotation = 180;
-    const updateRotation = (progress: number) => setRotation(startRotation + (endRotation - startRotation) * progress);
-    setRotation(startRotation);
-    const trigger = ScrollTrigger.create({
-      trigger: section,
-      // Keep the mark upright as the section first enters view, then begin
-      // rotating once the viewer has moved further into the section.
-      start: "top 50%",
-      end: "bottom top",
-      invalidateOnRefresh: true,
-      onUpdate: (self) => updateRotation(self.progress),
-      onRefresh: (self) => updateRotation(self.progress),
-      onLeave: () => setRotation(endRotation),
-      onLeaveBack: () => setRotation(startRotation),
+      const setRotation = gsap.quickSetter(logo, "rotation", "deg");
+      const startRotation = 0;
+      const endRotation = 180;
+      const updateRotation = (progress: number) => setRotation(startRotation + (endRotation - startRotation) * progress);
+      setRotation(startRotation);
+      const trigger = ScrollTrigger.create({
+        trigger: section,
+        start: "top 50%",
+        end: "bottom top",
+        invalidateOnRefresh: true,
+        onUpdate: (self) => updateRotation(self.progress),
+        onRefresh: (self) => updateRotation(self.progress),
+        onLeave: () => setRotation(endRotation),
+        onLeaveBack: () => setRotation(startRotation),
+      });
+
+      const refreshFrame = window.requestAnimationFrame(() => ScrollTrigger.refresh());
+      return () => {
+        window.cancelAnimationFrame(refreshFrame);
+        trigger.kill();
+      };
     });
 
-    const refreshFrame = window.requestAnimationFrame(() => ScrollTrigger.refresh());
-    return () => {
-      window.cancelAnimationFrame(refreshFrame);
-      trigger.kill();
-    };
+    return () => motion.revert();
   }, { scope: sectionRef });
 
   return (
@@ -79,7 +133,9 @@ const Instagram = () => {
                   className={`highlight-screen${index === 1 ? " highlight-screen--fit" : ""}`}
                   asset={video}
                   playbackPriority={isMobile ? (index === 0 ? 2 : 1) : 0}
-                  observerRoot={isMobile ? mobileScrollRoot : null}
+                  active={isMobile ? activeVideoIndex === index : undefined}
+                  loadOnDemand={isMobile && activeVideoIndex >= 0 && Math.abs(index - activeVideoIndex) <= 1}
+                  manualVisibility={isMobile}
                   showPlayFallback={isMobile}
                 />
                 <span className="highlight-island" aria-hidden="true" />
