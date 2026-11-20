@@ -422,4 +422,3 @@ h2 em { font-family: var(--serif); font-weight: 400; letter-spacing: -.075em; }
   .testimonial-track { width: max-content; transform: none; animation: none; }
   .testimonial-group[aria-hidden="true"] { display: none; }
 }
-

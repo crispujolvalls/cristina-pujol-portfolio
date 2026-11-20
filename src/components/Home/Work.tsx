@@ -194,4 +194,3 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, o
 };
 
 export default Work;
-

@@ -376,4 +376,3 @@ const MediaSlot = ({
 };
 
 export default MediaSlot;
-
