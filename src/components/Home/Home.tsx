@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { useLenisGsap } from "../hooks/useLenisGsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Hero from "./Hero";
 import EditorialCase from "./EditorialCase";
@@ -14,7 +13,6 @@ import Contact from "./Contact";
 
 const Home = () => {
   const pageRef = useRef<HTMLDivElement>(null);
-  useLenisGsap(pageRef);
 
   useEffect(() => {
     const mobileViewport = window.matchMedia("(max-width: 899px)");
