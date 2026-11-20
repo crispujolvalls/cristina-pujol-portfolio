@@ -73,6 +73,8 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, o
   const swipeStart = useRef<{ x: number; y: number; identifier: number } | null>(null);
   const caseLabel = String(caseNumber).padStart(2, "0");
   const isMobileCaseCarousel = window.matchMedia("(max-width: 760px)").matches;
+  const isHoverMediaActive = isMouseOver && !hasNavigated && hoverIndex >= 0;
+  const displayedIndex = isHoverMediaActive ? hoverIndex : activeIndex;
 
   useLayoutEffect(() => {
     if (resetVersion === 0) return;
@@ -180,11 +182,11 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, o
           &gt;
         </button>
         {items.length > 1 && <>
-          <span className="case-media-count" aria-hidden="true">{activeIndex + 1} / {items.length}</span>
+          <span className="case-media-count" aria-hidden="true">{displayedIndex + 1}/{items.length}</span>
           <span className="case-media-hint" aria-hidden="true">Swipe to view more</span>
         </>}
         <span className="case-media-status" aria-live="polite">
-          Case {caseLabel}: {items[activeIndex].label}, media {activeIndex + 1} of {items.length}
+          Case {caseLabel}: {items[displayedIndex].label}, media {displayedIndex + 1} of {items.length}
         </span>
       </div>
     </div>
@@ -192,3 +194,4 @@ const CaseCard = ({ caseNumber, items, defaultIndex, hoverIndex, resetVersion, o
 };
 
 export default Work;
+

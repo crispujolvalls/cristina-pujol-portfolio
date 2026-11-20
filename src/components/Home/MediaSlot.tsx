@@ -324,6 +324,7 @@ const MediaSlot = ({
             muted
             loop
             playsInline
+            disablePictureInPicture
             webkit-playsinline={showPlayFallback ? "true" : undefined}
             controls={showPlayFallback && playbackFailed}
             preload={shouldLoadVideo ? preload ?? "metadata" : "none"}
@@ -375,3 +376,4 @@ const MediaSlot = ({
 };
 
 export default MediaSlot;
+
